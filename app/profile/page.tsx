@@ -88,6 +88,10 @@ export default function ProfilePage() {
       formData.append('file', file)
       const response = await fetch('/api/parse-resume', { method: 'POST', body: formData })
       const data = await response.json()
+      if (response.status === 402) {
+        router.push('/settings?reason=no_extractions')
+        return
+      }
       if (!response.ok) throw new Error(data.error || 'Failed to parse resume')
       if (data.name) setName(data.name)
       if (data.title) setTitle(data.title)

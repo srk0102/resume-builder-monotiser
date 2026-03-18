@@ -1,5 +1,17 @@
+import type { Metadata } from "next"
 import Link from 'next/link'
 import { FileText } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: "Privacy Policy — AI Resume Builder",
+  description: "Learn how AI Resume Builder collects, uses, and protects your personal data.",
+  openGraph: {
+    title: "Privacy Policy — AI Resume Builder",
+    description: "Learn how AI Resume Builder collects, uses, and protects your personal data.",
+    url: "https://ai-resum.dev/privacy",
+    images: [{ url: "/og-image.png" }],
+  },
+}
 
 export default function PrivacyPage() {
   return (

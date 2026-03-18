@@ -310,9 +310,9 @@ export default function GeneratePage() {
     if (!jd.trim()) { setError('Please paste a job description'); return }
     if (!user) { router.push('/signin'); return }
 
-    // Check credits before wasting user's time
+    // Check credits — redirect to payment page if none
     if (credits <= 0) {
-      setError('No credits remaining. Purchase more credits to continue.')
+      router.push('/settings?reason=no_credits')
       return
     }
 
@@ -341,6 +341,7 @@ export default function GeneratePage() {
         body: JSON.stringify({ jd, descLength }),
       })
       const data = await response.json()
+      if (response.status === 402) { router.push('/settings?reason=no_credits'); return }
       if (!response.ok) throw new Error(data.error || 'Failed to generate resume')
 
       setGenerationStep(GENERATION_STEPS.length - 1)

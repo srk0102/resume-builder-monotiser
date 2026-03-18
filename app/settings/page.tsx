@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +10,14 @@ import { Breadcrumbs } from '@/components/breadcrumbs'
 import { Loader2, CreditCard, Package, Check, AlertCircle } from 'lucide-react'
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+      <SettingsContent />
+    </Suspense>
+  )
+}
+
+function SettingsContent() {
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState(false)
   const [purchaseError, setPurchaseError] = useState('')
@@ -17,7 +25,10 @@ export default function SettingsPage() {
   const [credits, setCredits] = useState<any>(null)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  const reason = searchParams.get('reason')
 
   useEffect(() => { loadSettings() }, [])
 
@@ -63,9 +74,28 @@ export default function SettingsPage() {
 
       <div className="container max-w-6xl mx-auto px-4 py-8">
         <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Buy Credits' }]} />
+
+        {reason && (
+          <Card className="mt-4 border-primary/50 bg-primary/5">
+            <CardContent className="p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground">
+                  {reason === 'no_credits' && 'You need credits to generate resumes'}
+                  {reason === 'no_extractions' && 'You need extraction credits to parse resumes'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {reason === 'no_credits' && 'Purchase a credit pack below to continue generating AI-tailored resumes.'}
+                  {reason === 'no_extractions' && 'Purchase a credit pack below to continue importing resumes via AI extraction.'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="mb-8 mt-4">
           <h1 className="text-3xl font-bold text-foreground">Buy Credits</h1>
-          <p className="text-muted-foreground mt-1">Manage your credits and subscriptions</p>
+          <p className="text-muted-foreground mt-1">Purchase credits to generate and extract resumes</p>
         </div>
 
         <Card className="mb-8">

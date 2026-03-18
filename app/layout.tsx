@@ -14,8 +14,41 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Resume Builder - AI-Powered ATS Resume Generator",
-  description: "Generate tailored, ATS-optimized resumes from your profile and any job description. Powered by AI.",
+  title: "AI Resume Builder — ATS-Optimized Resumes in Seconds",
+  description: "Generate professional, job-specific resumes tailored to any position. AI-powered, ATS-optimized, multiple themes. Starting at $5.",
+  metadataBase: new URL("https://ai-resum.dev"),
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/site.webmanifest",
+  openGraph: {
+    title: "AI Resume Builder — ATS-Optimized Resumes in Seconds",
+    description: "Generate professional, job-specific resumes tailored to any position. AI-powered, ATS-optimized, multiple themes. Starting at $5.",
+    url: "https://ai-resum.dev",
+    siteName: "AI Resume Builder",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "AI Resume Builder",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AI Resume Builder — ATS-Optimized Resumes in Seconds",
+    description: "Generate professional, job-specific resumes tailored to any position. AI-powered, ATS-optimized, multiple themes.",
+    images: ["/og-image.png"],
+  },
+  keywords: ["resume builder", "AI resume", "ATS resume", "resume generator", "job application", "tailored resume"],
 };
 
 export default function RootLayout({

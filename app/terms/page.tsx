@@ -1,5 +1,17 @@
+import type { Metadata } from "next"
 import Link from 'next/link'
 import { FileText } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: "Terms of Service — AI Resume Builder",
+  description: "Read the terms of service for AI Resume Builder including pricing, refund policy, and credit expiration.",
+  openGraph: {
+    title: "Terms of Service — AI Resume Builder",
+    description: "Read the terms of service for AI Resume Builder including pricing, refund policy, and credit expiration.",
+    url: "https://ai-resum.dev/terms",
+    images: [{ url: "/og-image.png" }],
+  },
+}
 
 export default function TermsPage() {
   return (
