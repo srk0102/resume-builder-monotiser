@@ -66,15 +66,30 @@ export async function POST(request: Request) {
     if (!sanitized.education) sanitized.education = []
     if (!sanitized.skills) sanitized.skills = []
     if (sanitized.education) {
-      sanitized.education = sanitized.education.map((edu: any) => ({
-        ...edu,
-        startDate: fixDate(edu.startDate),
-        endDate: fixDate(edu.endDate),
-      }))
+      sanitized.education = sanitized.education.map((edu: any) => {
+        const dateStr = edu.endDate?.toString() || ''
+        // For year ranges like "2023-2025", extract LAST year
+        const rangeMatch = dateStr.match(/(\d{4})\s*[-–]\s*(\d{4})/)
+        const startRangeMatch = edu.startDate?.toString().match(/(\d{4})/)
+        let startDate = ''
+        let endDate = ''
+        if (rangeMatch) {
+          startDate = `${rangeMatch[1]}-05-01`
+          endDate = `${rangeMatch[2]}-05-01`
+        } else {
+          const endYear = dateStr.match(/(\d{4})/)?.[1]
+          endDate = endYear ? `${endYear}-05-01` : (fixDate(edu.endDate) || '')
+          const startYear = startRangeMatch?.[1]
+          startDate = startYear ? `${startYear}-05-01` : (fixDate(edu.startDate) || '')
+        }
+        return { ...edu, startDate, endDate }
+      })
     }
+    // Clear work summary to avoid duplicate rendering (summary + highlights)
     if (sanitized.work) {
       sanitized.work = sanitized.work.map((w: any) => ({
         ...w,
+        summary: '',
         startDate: fixDate(w.startDate),
         endDate: fixDate(w.endDate),
       }))

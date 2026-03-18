@@ -254,7 +254,7 @@ ${experiencesWithContext}`
         position: exp.role || '',
         startDate: exp.startDate || '',
         endDate: exp.endDate === 'Present' ? '' : (exp.endDate || ''),
-        summary: highlights.slice(0, 3).join('. ') + (highlights.length > 0 ? '.' : ''),
+        summary: '',
         highlights
       })
     }
@@ -279,11 +279,24 @@ ${experiencesWithContext}`
       work: workEntries,
       education: (profile.education || []).map((edu: any) => {
         const year = edu.year?.toString().trim() || ''
-        const endDate = year ? (year.match(/^\d{4}$/) ? `${year}-01-01` : year) : ''
+        let startDate = ''
+        let endDate = ''
+        // Handle year ranges like "2023-2025" or "2017-2021"
+        const rangeMatch = year.match(/^(\d{4})\s*[-–]\s*(\d{4})$/)
+        if (rangeMatch) {
+          startDate = rangeMatch[1]
+          endDate = rangeMatch[2]
+        } else if (/^\d{4}$/.test(year)) {
+          endDate = year
+        } else if (year) {
+          const yearExtract = year.match(/(\d{4})/)
+          if (yearExtract) endDate = yearExtract[1]
+        }
         return {
           institution: edu.school || '',
           studyType: edu.degree?.split(',')[0]?.trim() || edu.degree || '',
           area: edu.degree?.split(',').slice(1).join(',').trim() || '',
+          startDate,
           endDate,
         }
       }),
