@@ -20,29 +20,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
     }
 
-    const plans = {
+    const plans: Record<string, { amount: number; credits: number; extractions: number; name: string; recurring?: boolean }> = {
       basic: {
         amount: 500, // $5.00
         credits: 55,
+        extractions: 5,
         name: 'Basic Pack - 55 Resumes'
       },
       pro: {
         amount: 1500, // $15.00
         credits: 200,
+        extractions: 15,
         name: 'Pro Pack - 200 Resumes'
       },
       unlimited: {
         amount: 2900, // $29.00
         credits: 9999,
+        extractions: 999,
         name: 'Unlimited Monthly',
         recurring: true
       }
     }
 
-    const selectedPlan = plans[plan as keyof typeof plans]
+    const selectedPlan = plans[plan]
 
     // Create Stripe checkout session
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams: any = {
       customer_email: user.email,
       line_items: [
         {
@@ -63,14 +66,29 @@ export async function POST(request: Request) {
         },
       ],
       mode: selectedPlan.recurring ? 'subscription' : 'payment',
-      success_url: `${request.headers.get('origin')}/generate?payment=success`,
+      success_url: `${request.headers.get('origin')}/dashboard?payment=success`,
       cancel_url: `${request.headers.get('origin')}/settings?payment=cancelled`,
       metadata: {
         user_id: user.id,
         plan: plan,
-        credits: selectedPlan.credits.toString()
+        credits: selectedPlan.credits.toString(),
+        extractions: selectedPlan.extractions.toString()
       }
-    })
+    }
+
+    // For subscriptions, also set metadata on the subscription so renewals can find the user
+    if (selectedPlan.recurring) {
+      sessionParams.subscription_data = {
+        metadata: {
+          user_id: user.id,
+          plan: plan,
+          credits: selectedPlan.credits.toString(),
+          extractions: selectedPlan.extractions.toString()
+        }
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
 
     return NextResponse.json({ url: session.url })
   } catch (error: any) {

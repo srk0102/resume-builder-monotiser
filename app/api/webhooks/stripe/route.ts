@@ -36,11 +36,14 @@ export async function POST(request: Request) {
       const userId = session.metadata.user_id
       const credits = parseInt(session.metadata.credits)
       const plan = session.metadata.plan
+      const amountPaid = (session.amount_total || 0) / 100
 
       // Add credits to user account
       const { error } = await supabase.rpc('add_credits', {
         p_user_id: userId,
-        p_amount: credits
+        p_credits: credits,
+        p_stripe_payment_id: session.payment_intent || session.id,
+        p_amount_paid: amountPaid
       })
 
       if (error) {
@@ -48,7 +51,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to add credits' }, { status: 500 })
       }
 
-      console.log(`Added ${credits} credits to user ${userId} (plan: ${plan})`)
+      // Add extraction credits
+      const extractions = parseInt(session.metadata.extractions || '0')
+      if (extractions > 0) {
+        await supabase.rpc('add_extraction_credits', {
+          p_user_id: userId,
+          p_credits: extractions
+        })
+      }
+
+      console.log(`Added ${credits} credits + ${extractions} extractions to user ${userId} (plan: ${plan})`)
     }
 
     // Handle subscription renewals
@@ -63,7 +75,15 @@ export async function POST(request: Request) {
           // Add 9999 credits for unlimited plan renewal
           await supabase.rpc('add_credits', {
             p_user_id: userId,
-            p_amount: 9999
+            p_credits: 9999,
+            p_stripe_payment_id: invoice.payment_intent || invoice.id,
+            p_amount_paid: (invoice.amount_paid || 0) / 100
+          })
+
+          // Also renew extraction credits
+          await supabase.rpc('add_extraction_credits', {
+            p_user_id: userId,
+            p_credits: 999
           })
 
           console.log(`Renewed unlimited subscription for user ${userId}`)

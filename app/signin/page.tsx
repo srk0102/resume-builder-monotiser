@@ -21,84 +21,46 @@ export default function SignInPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    } else {
-      router.push('/generate')
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) { setError(error.message); setLoading(false) }
+    else { router.push('/generate') }
   }
 
-
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="max-w-md w-full">
         <CardHeader className="text-center">
-          <FileText className="h-12 w-12 mx-auto mb-4" />
+          <FileText className="h-12 w-12 mx-auto mb-4 text-primary" />
           <CardTitle className="text-2xl">Welcome Back</CardTitle>
-          <p className="text-gray-600 mt-2">Sign in to your account</p>
+          <p className="text-muted-foreground mt-2">Sign in to your account</p>
         </CardHeader>
         <CardContent className="space-y-6">
           <form onSubmit={handleSignIn} className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Email</label>
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <Input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
-
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium">Password</label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-gray-600 hover:text-black hover:underline"
-                >
+                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground hover:underline">
                   Forgot password?
                 </Link>
               </div>
-              <Input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <Input type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
-
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+              <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
                 {error}
               </div>
             )}
-
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</> : 'Sign In'}
             </Button>
           </form>
-
-          <p className="text-sm text-center text-gray-600 mt-4">
+          <p className="text-sm text-center text-muted-foreground mt-4">
             Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-black hover:underline">
-              Sign up
-            </Link>
+            <Link href="/signup" className="font-medium text-primary hover:underline">Sign up</Link>
           </p>
         </CardContent>
       </Card>

@@ -2,16 +2,14 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 // JSON Resume themes
-const elegantTheme = require('jsonresume-theme-elegant')
-const stackoverflowTheme = require('jsonresume-theme-stackoverflow')
-const kendallTheme = require('jsonresume-theme-kendall')
-const flatTheme = require('jsonresume-theme-flat')
-
-const themes = {
-  elegant: elegantTheme,
-  stackoverflow: stackoverflowTheme,
-  kendall: kendallTheme,
-  flat: flatTheme
+const themes: Record<string, any> = {
+  elegant: require('jsonresume-theme-elegant'),
+  stackoverflow: require('jsonresume-theme-stackoverflow'),
+  kendall: require('jsonresume-theme-kendall'),
+  flat: require('jsonresume-theme-flat'),
+  macchiato: require('jsonresume-theme-macchiato'),
+  class: require('jsonresume-theme-class'),
+  onepage: require('jsonresume-theme-onepage'),
 }
 
 export async function POST(request: Request) {
@@ -23,86 +21,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { resumeText, theme = 'elegant' } = await request.json()
+    const { jsonResume, theme = 'elegant' } = await request.json()
 
-    if (!resumeText) {
-      return NextResponse.json({ error: 'Resume text required' }, { status: 400 })
+    if (!jsonResume) {
+      return NextResponse.json({ error: 'JSON Resume data required' }, { status: 400 })
     }
 
-    // Get user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
+    // Render with selected theme
+    const selectedTheme = themes[theme] || themes.elegant
+    let html = selectedTheme.render(jsonResume)
 
-    // Convert profile to JSON Resume format
-    const jsonResume = {
-      basics: {
-        name: profile?.name || 'Your Name',
-        label: profile?.title || 'Professional Title',
-        email: profile?.email || user.email,
-        phone: profile?.phone || '',
-        summary: extractSummary(resumeText),
-        location: {
-          city: profile?.location?.split(',')[0] || '',
-          countryCode: 'US'
-        },
-        profiles: []
-      },
-      work: (profile?.experiences || []).map((exp: any) => ({
-        name: exp.company,
-        position: exp.role,
-        startDate: exp.startDate,
-        endDate: exp.endDate,
-        summary: exp.context,
-        highlights: extractHighlights(exp.context)
-      })),
-      education: (profile?.education || []).map((edu: any) => ({
-        institution: edu.school,
-        studyType: edu.degree.split(' ')[0],
-        area: edu.degree.split(' ').slice(1).join(' '),
-        endDate: edu.year
-      })),
-      skills: (profile?.skills || []).map((skill: string) => ({
-        name: skill,
-        level: 'Advanced',
-        keywords: [skill]
-      }))
+    // Remove all images from themed HTML (no profile pics in resumes)
+    html = html.replace(/<img[^>]*>/gi, '')
+    html = html.replace('</head>', '<style>img{display:none!important;}</style></head>')
+
+    // Inject CSS fixes for broken themes
+    if (theme === 'class') {
+      const classFixCSS = `<style>
+        /* Override class theme's broken float-based skills layout */
+        #skills {
+          overflow: visible !important;
+        }
+        #skills .item,
+        #languages .item,
+        #interests .item {
+          float: none !important;
+          width: auto !important;
+          display: inline-block !important;
+          vertical-align: top !important;
+          min-width: 140px !important;
+          max-width: 280px !important;
+          margin-right: 24px !important;
+          margin-bottom: 10px !important;
+        }
+        #skills .item h3 {
+          font-size: 14px !important;
+          margin-bottom: 4px !important;
+          margin-top: 0 !important;
+        }
+        #skills .item ul {
+          padding-left: 20px !important;
+          margin: 0 !important;
+        }
+        #skills .item ul li {
+          font-size: 13px !important;
+          line-height: 1.5 !important;
+        }
+      </style>`
+      html = html.replace('</head>', classFixCSS + '</head>')
     }
 
-    // Generate HTML from theme
-    const selectedTheme = themes[theme as keyof typeof themes] || elegantTheme
-    const html = selectedTheme.render(jsonResume)
-
-    return NextResponse.json({
-      json: jsonResume,
-      html,
-      theme
-    })
+    return NextResponse.json({ html, theme })
   } catch (error: any) {
     console.error('Export error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to export resume' },
+      { error: 'Failed to export resume. Please try again.' },
       { status: 500 }
     )
   }
-}
-
-function extractSummary(resumeText: string): string {
-  // Extract summary section from markdown
-  const summaryMatch = resumeText.match(/##\s*(?:Summary|Professional Summary|About)\s*\n+([\s\S]*?)(?=\n##|$)/i)
-  if (summaryMatch) {
-    return summaryMatch[1].trim().replace(/^[-*]\s*/gm, '').trim()
-  }
-  return 'Professional with extensive experience in the field.'
-}
-
-function extractHighlights(context: string): string[] {
-  // Split context into bullet points
-  return context
-    .split(/[.!]\s+/)
-    .filter(s => s.trim().length > 10)
-    .slice(0, 5)
-    .map(s => s.trim())
 }
