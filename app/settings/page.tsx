@@ -53,9 +53,8 @@ export default function SettingsPage() {
   }
 
   const plans = [
-    { id: 'basic', name: 'Basic Pack', price: '$5', credits: 55, extractions: 5, popular: true, features: ['5 resume extractions', '55 resume generations', 'All AI features included', 'Multiple themes', 'One-time payment', 'No refunds'] },
-    { id: 'pro', name: 'Pro Pack', price: '$15', credits: 200, extractions: 15, features: ['15 resume extractions', '200 resume generations', 'All AI features included', 'Multiple themes', 'Priority support', 'One-time payment', 'No refunds'] },
-    { id: 'unlimited', name: 'Unlimited Monthly', price: '$29/mo', credits: 9999, extractions: 999, recurring: true, features: ['Unlimited extractions', 'Unlimited resume generations', 'All AI features included', 'Multiple themes', 'Priority support', 'Cancel anytime'] },
+    { id: 'basic', name: 'Basic Pack', price: '$5', credits: 55, extractions: 5, popular: true, features: ['5 resume extractions', '55 resume generations', 'All AI features included', 'Multiple themes', 'Credits valid for 30 days', 'One-time payment', 'No refunds'] },
+    { id: 'pro', name: 'Pro Pack', price: '$15', credits: 200, extractions: 15, features: ['15 resume extractions', '200 resume generations', 'All AI features included', 'Multiple themes', 'Priority support', 'Credits valid for 30 days', 'One-time payment', 'No refunds'] },
   ]
 
   return (
@@ -99,7 +98,7 @@ export default function SettingsPage() {
             </Card>
           )}
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {plans.map((plan) => (
               <Card key={plan.id} className={plan.popular ? 'border-primary border-2' : ''}>
                 <CardHeader>
@@ -112,7 +111,7 @@ export default function SettingsPage() {
                   <CardTitle className="mt-4">{plan.name}</CardTitle>
                   <div className="mt-2">
                     <span className="text-3xl font-bold text-foreground">{plan.price}</span>
-                    {plan.recurring && <span className="text-muted-foreground ml-1">per month</span>}
+                    <span className="text-muted-foreground ml-1">one-time</span>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -132,6 +131,14 @@ export default function SettingsPage() {
               </Card>
             ))}
           </div>
+
+          <p className="text-center text-xs text-muted-foreground mt-8 max-w-xl mx-auto">
+            By making a purchase, you agree to our{' '}
+            <a href="/terms" className="text-primary underline hover:text-primary/80">Terms of Service</a>
+            {' '}and{' '}
+            <a href="/privacy" className="text-primary underline hover:text-primary/80">Privacy Policy</a>.
+            All purchases are final. No refunds. Credits expire 30 days after purchase.
+          </p>
         </div>
       </div>
     </div>

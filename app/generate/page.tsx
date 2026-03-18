@@ -118,19 +118,21 @@ export default function GeneratePage() {
 
   async function loadUser() {
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      router.push('/signin')
+      return
+    }
     setUser(user)
-    if (user) {
-      const [{ data: creditData }, { data: profile }] = await Promise.all([
-        supabase.from('credits').select('remaining_credits').eq('user_id', user.id).single(),
-        supabase.from('profiles').select('name, experiences').eq('id', user.id).maybeSingle()
-      ])
-      setCredits(creditData?.remaining_credits || 0)
+    const [{ data: creditData }, { data: profile }] = await Promise.all([
+      supabase.from('credits').select('remaining_credits').eq('user_id', user.id).single(),
+      supabase.from('profiles').select('name, experiences').eq('id', user.id).maybeSingle()
+    ])
+    setCredits(creditData?.remaining_credits || 0)
 
-      // Redirect to profile if incomplete
-      if (!profile?.name || !profile?.experiences?.length) {
-        router.push('/profile')
-        return
-      }
+    // Redirect to profile if incomplete
+    if (!profile?.name || !profile?.experiences?.length) {
+      router.push('/profile')
+      return
     }
   }
 
@@ -306,13 +308,20 @@ export default function GeneratePage() {
 
   async function handleGenerate() {
     if (!jd.trim()) { setError('Please paste a job description'); return }
-    if (user) {
-      const { data: profile } = await supabase
-        .from('profiles').select('name, experiences').eq('id', user.id).maybeSingle()
-      if (!profile || !profile.name || !profile.experiences || profile.experiences.length === 0) {
-        setError('Please complete your profile first! Add your name and at least one work experience.')
-        setTimeout(() => router.push('/profile'), 2000); return
-      }
+    if (!user) { router.push('/signin'); return }
+
+    // Check credits before wasting user's time
+    if (credits <= 0) {
+      setError('No credits remaining. Purchase more credits to continue.')
+      return
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles').select('name, experiences').eq('id', user.id).maybeSingle()
+    if (!profile || !profile.name || !profile.experiences || profile.experiences.length === 0) {
+      setError('Please complete your profile first! Add your name and at least one work experience.')
+      setTimeout(() => router.push('/profile'), 2000)
+      return
     }
     setLoading(true); setError(''); setJsonResume(null); setThemedHtml('')
     setSelectedTheme('elegant'); setEditMode(false); setGenerationStep(0)

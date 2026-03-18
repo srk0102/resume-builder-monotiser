@@ -16,36 +16,28 @@ export async function POST(request: Request) {
 
     const { plan } = await request.json()
 
-    if (!plan || !['basic', 'pro', 'unlimited'].includes(plan)) {
+    if (!plan || !['basic', 'pro'].includes(plan)) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
     }
 
-    const plans: Record<string, { amount: number; credits: number; extractions: number; name: string; recurring?: boolean }> = {
+    const plans: Record<string, { amount: number; credits: number; extractions: number; name: string }> = {
       basic: {
         amount: 500, // $5.00
         credits: 55,
         extractions: 5,
-        name: 'Basic Pack - 55 Resumes'
+        name: 'Basic Pack - 55 Resumes + 5 Extractions'
       },
       pro: {
         amount: 1500, // $15.00
         credits: 200,
         extractions: 15,
-        name: 'Pro Pack - 200 Resumes'
-      },
-      unlimited: {
-        amount: 2900, // $29.00
-        credits: 9999,
-        extractions: 999,
-        name: 'Unlimited Monthly',
-        recurring: true
+        name: 'Pro Pack - 200 Resumes + 15 Extractions'
       }
     }
 
     const selectedPlan = plans[plan]
 
-    // Create Stripe checkout session
-    const sessionParams: any = {
+    const session = await stripe.checkout.sessions.create({
       customer_email: user.email,
       line_items: [
         {
@@ -53,19 +45,14 @@ export async function POST(request: Request) {
             currency: 'usd',
             product_data: {
               name: selectedPlan.name,
-              description: `${selectedPlan.credits} resume generation credits`,
+              description: `${selectedPlan.credits} resume generations + ${selectedPlan.extractions} resume extractions. Credits valid for 30 days. No refunds.`,
             },
             unit_amount: selectedPlan.amount,
-            ...(selectedPlan.recurring && {
-              recurring: {
-                interval: 'month'
-              }
-            })
           },
           quantity: 1,
         },
       ],
-      mode: selectedPlan.recurring ? 'subscription' : 'payment',
+      mode: 'payment',
       success_url: `${request.headers.get('origin')}/dashboard?payment=success`,
       cancel_url: `${request.headers.get('origin')}/settings?payment=cancelled`,
       metadata: {
@@ -74,21 +61,7 @@ export async function POST(request: Request) {
         credits: selectedPlan.credits.toString(),
         extractions: selectedPlan.extractions.toString()
       }
-    }
-
-    // For subscriptions, also set metadata on the subscription so renewals can find the user
-    if (selectedPlan.recurring) {
-      sessionParams.subscription_data = {
-        metadata: {
-          user_id: user.id,
-          plan: plan,
-          credits: selectedPlan.credits.toString(),
-          extractions: selectedPlan.extractions.toString()
-        }
-      }
-    }
-
-    const session = await stripe.checkout.sessions.create(sessionParams)
+    })
 
     return NextResponse.json({ url: session.url })
   } catch (error: any) {

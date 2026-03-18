@@ -117,8 +117,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please complete your profile first.' }, { status: 400 })
     }
 
-    // Deduct credit upfront
-    await supabase.rpc('deduct_credit', { p_user_id: user.id })
+    // Deduct credit upfront - blocks if no credits
+    const { data: deducted } = await supabase.rpc('deduct_credit', { p_user_id: user.id })
+    if (!deducted) {
+      return NextResponse.json({ error: 'No credits remaining. Purchase more credits to continue.' }, { status: 402 })
+    }
 
     const profile = {
       name: userProfile.name,
