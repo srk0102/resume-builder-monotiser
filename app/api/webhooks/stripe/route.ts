@@ -1,12 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 import { NextResponse } from 'next/server'
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY!
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET!
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const RESEND_API_KEY = process.env.RESEND_API_KEY!
 
 const stripe = require('stripe')(STRIPE_SECRET_KEY)
+const resend = new Resend(RESEND_API_KEY)
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
@@ -23,6 +26,144 @@ async function logEvent(eventId: string, eventType: string, userId: string | nul
   }).then(({ error }) => {
     if (error) console.error('Failed to log payment event:', error)
   })
+}
+
+async function sendReceiptEmail(email: string, plan: string, amount: number, credits: number, extractions: number, paymentId: string) {
+  const planName = plan === 'basic' ? 'Basic Pack' : 'Pro Pack'
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  try {
+    await resend.emails.send({
+      from: 'AI Resume Builder <noreply@ai-resum.dev>',
+      to: email,
+      subject: `Payment Receipt — ${planName} ($${amount})`,
+      html: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#7c3aed;padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:600;">AI Resume Builder</h1>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <h2 style="margin:0 0 8px;color:#18181b;font-size:20px;font-weight:600;">Payment Receipt</h2>
+              <p style="margin:0 0 24px;color:#a1a1aa;font-size:13px;">Thank you for your purchase!</p>
+
+              <!-- Invoice Details -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;border-radius:8px;border:1px solid #e4e4e7;overflow:hidden;">
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid #e4e4e7;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color:#71717a;font-size:13px;">Date</td>
+                        <td align="right" style="color:#18181b;font-size:13px;font-weight:500;">${date}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid #e4e4e7;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color:#71717a;font-size:13px;">Plan</td>
+                        <td align="right" style="color:#18181b;font-size:13px;font-weight:500;">${planName}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid #e4e4e7;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color:#71717a;font-size:13px;">Resume Generations</td>
+                        <td align="right" style="color:#18181b;font-size:13px;font-weight:500;">${credits} credits</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid #e4e4e7;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color:#71717a;font-size:13px;">Resume Extractions</td>
+                        <td align="right" style="color:#18181b;font-size:13px;font-weight:500;">${extractions} credits</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid #e4e4e7;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color:#71717a;font-size:13px;">Credits Valid Until</td>
+                        <td align="right" style="color:#18181b;font-size:13px;font-weight:500;">${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 20px;background-color:#f4f4f5;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="color:#18181b;font-size:15px;font-weight:600;">Total Paid</td>
+                        <td align="right" style="color:#7c3aed;font-size:18px;font-weight:700;">$${amount.toFixed(2)} USD</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;color:#a1a1aa;font-size:12px;line-height:1.5;">
+                Transaction ID: ${paymentId}
+              </p>
+
+              <!-- CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;">
+                <tr>
+                  <td align="center">
+                    <a href="https://ai-resum.dev/dashboard" style="display:inline-block;background-color:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 36px;border-radius:8px;">
+                      Start Generating Resumes
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;color:#a1a1aa;font-size:12px;line-height:1.5;text-align:center;">
+                All purchases are final. No refunds. Credits expire 30 days after purchase.<br>
+                By purchasing, you agreed to our <a href="https://ai-resum.dev/terms" style="color:#7c3aed;text-decoration:none;">Terms of Service</a>.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#fafafa;padding:24px 40px;border-top:1px solid #e4e4e7;">
+              <p style="margin:0;color:#a1a1aa;font-size:12px;text-align:center;">
+                &copy; 2026 AI Resume Builder &middot; <a href="https://ai-resum.dev/privacy" style="color:#7c3aed;text-decoration:none;">Privacy</a> &middot; <a href="https://ai-resum.dev/terms" style="color:#7c3aed;text-decoration:none;">Terms</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+    })
+    console.log(`Receipt email sent to ${email}`)
+  } catch (err) {
+    console.error('Failed to send receipt email:', err)
+  }
 }
 
 export async function POST(request: Request) {
@@ -57,14 +198,12 @@ export async function POST(request: Request) {
       }
 
       const userId = session.metadata?.user_id
-      const plan = session.metadata?.plan
       const amountPaid = (session.amount_total || 0) / 100
 
       // SECURITY: Determine credits from the verified payment amount, NOT from metadata
-      // This prevents any tampering with metadata credits
       const PLAN_MAP: Record<number, { credits: number; extractions: number; plan: string }> = {
-        500: { credits: 55, extractions: 5, plan: 'basic' },    // $5.00
-        1500: { credits: 200, extractions: 15, plan: 'pro' },   // $15.00
+        500: { credits: 55, extractions: 5, plan: 'basic' },
+        1500: { credits: 200, extractions: 15, plan: 'pro' },
       }
 
       const verifiedPlan = PLAN_MAP[session.amount_total]
@@ -121,6 +260,12 @@ export async function POST(request: Request) {
         extractions_granted: verifiedPlan.extractions,
         payment_intent: paymentId,
       })
+
+      // Send receipt email
+      const customerEmail = session.customer_email || session.customer_details?.email
+      if (customerEmail) {
+        await sendReceiptEmail(customerEmail, verifiedPlan.plan, amountPaid, verifiedPlan.credits, verifiedPlan.extractions, paymentId)
+      }
     }
 
     // Payment intent succeeded
