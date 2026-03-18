@@ -23,7 +23,7 @@ export default function SignInPage() {
     setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false) }
-    else { router.push('/generate') }
+    else { router.push('/dashboard') }
   }
 
   return (

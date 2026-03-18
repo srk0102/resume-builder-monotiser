@@ -29,6 +29,7 @@ function SettingsContent() {
   const supabase = createClient()
 
   const reason = searchParams.get('reason')
+  const payment = searchParams.get('payment')
 
   useEffect(() => { loadSettings() }, [])
 
@@ -74,6 +75,16 @@ function SettingsContent() {
 
       <div className="container max-w-6xl mx-auto px-4 py-8">
         <Breadcrumbs items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Buy Credits' }]} />
+
+        {payment === 'cancelled' && (
+          <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0" />
+            <div>
+              <p className="font-medium text-yellow-700 dark:text-yellow-300">Payment cancelled</p>
+              <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">No charges were made. You can try again whenever you're ready.</p>
+            </div>
+          </div>
+        )}
 
         {reason && (
           <Card className="mt-4 border-primary/50 bg-primary/5">

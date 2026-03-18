@@ -2,14 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || ''
-const MODEL = 'meta-llama/Llama-3.3-70B-Instruct-Turbo'
-const MODEL_CONTEXT_LIMIT = 131072
+const MODEL_MAIN = 'Qwen/Qwen3-235B-A22B-Instruct-2507-FP8'  // $0.20/$0.60 per M tokens - summary + bullets
+const MODEL_CHEAP = 'meta-llama/Meta-Llama-3-8B-Instruct-Lite' // $0.10/$0.10 per M tokens - keyword extraction
 
-function estimateTokens(text: string) {
-  return Math.ceil(text.length / 4)
-}
-
-async function callAI(messages: any[], maxTokens: number) {
+async function callAI(model: string, messages: any[], maxTokens: number) {
   const resp = await fetch('https://api.together.xyz/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -17,7 +13,7 @@ async function callAI(messages: any[], maxTokens: number) {
       'Authorization': `Bearer ${TOGETHER_API_KEY}`,
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages,
       temperature: 0.5,
       max_tokens: maxTokens,
@@ -79,6 +75,33 @@ function groupSkills(skills: string[]): any[] {
     }))
 }
 
+// Parse the batched AI response into per-experience highlights
+function parseBatchedResponse(raw: string, experienceCount: number): { summary: string, experiences: string[][] } {
+  const cleaned = cleanAIResponse(raw)
+
+  // Extract summary (between [SUMMARY] and [EXP_0] or first [EXP_])
+  const summaryMatch = cleaned.match(/\[SUMMARY\]\s*([\s\S]*?)(?=\[EXP_\d+\]|$)/)
+  const summary = summaryMatch ? summaryMatch[1].trim() : ''
+
+  // Extract each experience section
+  const experiences: string[][] = []
+  for (let i = 0; i < experienceCount; i++) {
+    const pattern = new RegExp(`\\[EXP_${i}\\]\\s*([\\s\\S]*?)(?=\\[EXP_\\d+\\]|$)`)
+    const match = cleaned.match(pattern)
+    if (match) {
+      const bullets = match[1]
+        .split('\n')
+        .map((line: string) => line.replace(/^[-*•]\s*/, '').trim())
+        .filter((line: string) => line.length > 15 && !line.toLowerCase().startsWith('here'))
+      experiences.push(bullets)
+    } else {
+      experiences.push([])
+    }
+  }
+
+  return { summary, experiences }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -136,69 +159,94 @@ export async function POST(request: Request) {
 
     console.log(`=== GENERATING RESUME for ${profile.name} (${profile.experiences.length} exp, long=${isLong}) ===`)
 
-    // Step 1: Extract JD keywords
+    // ========================================
+    // CALL 1: Extract JD keywords (cheap 8B model, $0.10/M tokens)
+    // ========================================
     const jdTrimmed = jd.length > 4000 ? jd.substring(0, 4000) : jd
-    const keywords = cleanAIResponse(await callAI([{
+    const keywords = cleanAIResponse(await callAI(MODEL_CHEAP, [{
       role: 'user',
       content: `Extract the 20 most important skills, technologies, and requirements from this job description. Return ONLY a comma-separated list.\n\n${jdTrimmed}`
     }], 150))
-    console.log('Keywords:', keywords.substring(0, 100))
+    console.log('Keywords (8B):', keywords.substring(0, 100))
 
-    // Step 2: Generate summary
-    const summaryRaw = await callAI([{
-      role: 'system',
-      content: 'You are a professional resume writer. Output ONLY what is asked. No preamble, no labels, no explanations.'
-    }, {
-      role: 'user',
-      content: `Write a 3-sentence professional summary for ${profile.name}, ${profile.title}. They have worked at: ${profile.experiences.map((e: any) => `${e.role} at ${e.company}`).join(', ')}. Their skills include: ${profile.skills.slice(0, 20).join(', ')}. Target role keywords: ${keywords}. Output ONLY the summary paragraph.`
-    }], 200)
-    const summary = cleanAIResponse(summaryRaw)
-
-    // Step 3: Tailor each experience's bullets individually
-    const workEntries: any[] = []
-
-    for (let i = 0; i < profile.experiences.length; i++) {
-      const exp = profile.experiences[i]
-      let highlights: string[] = []
-
+    // ========================================
+    // CALL 2: Generate summary + ALL experience bullets in ONE call (70B model)
+    // 128K context window, 16K max output — plenty of room
+    // ========================================
+    const experiencesWithContext = profile.experiences.map((exp: any, i: number) => {
       if (exp.context && exp.context.trim().length >= 20) {
-        try {
-          const contextTrimmed = exp.context.length > 3000 ? exp.context.substring(0, 3000) : exp.context
-          const bulletCount = isLong ? '6-10' : '3-5'
+        const contextTrimmed = exp.context.length > 3000 ? exp.context.substring(0, 3000) : exp.context
+        return `[EXP_${i}] ${exp.role} at ${exp.company} (${exp.startDate || '?'} - ${exp.endDate || 'Present'})\n${contextTrimmed}`
+      }
+      return `[EXP_${i}] ${exp.role} at ${exp.company} (${exp.startDate || '?'} - ${exp.endDate || 'Present'})\nNo details provided.`
+    }).join('\n\n')
 
-          const raw = await callAI([{
-            role: 'system',
-            content: `You are a resume bullet point writer. Output ONLY bullet points starting with "- ". No preamble, no headers, no explanations, no "Here are" text. Just the bullet points.`
-          }, {
-            role: 'user',
-            content: `Rewrite these responsibilities as ${bulletCount} ATS-optimized resume bullet points for the role of ${exp.role} at ${exp.company}.
-
-Original:
-${contextTrimmed}
-
-Target keywords: ${keywords}
-
-Rules:
+    const bulletRules = isLong
+      ? `For EACH experience, write exactly 5-6 ATS-optimized bullet points:
 - Start each with a strong action verb
 - Keep ALL specific technologies, metrics, and details from the original
 - Naturally weave in relevant target keywords
-- Do NOT invent information not in the original
-- Output ONLY "- " bullet points, nothing else`
-          }], isLong ? 1500 : 800)
+- Do NOT invent information not in the original`
+      : `For EACH experience, write 1-2 concise bullet points:
+- Combine related work into single impactful statements
+- Group technologies by category (say "frontend frameworks" not "React, Angular, Vue", say "cloud platforms" not "AWS, GCP, Azure")
+- Only mention 1-2 MOST important specific technologies if they match target keywords
+- Keep metrics and measurable impact
+- Each bullet should be max 1.5 lines
+- Do NOT invent information not in the original`
 
-          const cleaned = cleanAIResponse(raw)
-          highlights = cleaned
-            .split('\n')
-            .map((line: string) => line.replace(/^[-*•]\s*/, '').trim())
-            .filter((line: string) => line.length > 15 && !line.toLowerCase().startsWith('here'))
+    // Estimate output tokens needed: summary (~100) + per experience (long: ~150, short: ~60)
+    const maxOutputTokens = 200 + profile.experiences.length * (isLong ? 200 : 100)
 
-          console.log(`  ✓ ${exp.role} @ ${exp.company}: ${highlights.length} bullets`)
-        } catch (err) {
-          console.error(`  ✗ ${exp.role} @ ${exp.company}:`, err)
-          highlights = exp.context.split(/\r?\n+/).filter((l: string) => l.trim().length > 10).slice(0, isLong ? 8 : 4)
-        }
+    const batchedPrompt = `You are a professional resume writer. Generate a resume summary and tailored bullet points for ALL experiences below.
+
+CANDIDATE: ${profile.name}, ${profile.title}
+SKILLS: ${profile.skills.slice(0, 25).join(', ')}
+TARGET KEYWORDS: ${keywords}
+
+OUTPUT FORMAT (follow EXACTLY):
+[SUMMARY]
+Write a 3-sentence professional summary paragraph.
+
+${profile.experiences.map((_: any, i: number) => `[EXP_${i}]\n- bullet point 1\n- bullet point 2${isLong ? '\n- bullet point 3\n- bullet point 4\n- bullet point 5' : ''}`).join('\n\n')}
+
+RULES:
+${bulletRules}
+- Output ONLY the sections above with their markers. No preamble, no explanations, no headers besides the markers.
+- Each bullet starts with "- "
+- For experiences with "No details provided", write 1 generic bullet based on the role title.
+
+EXPERIENCES:
+${experiencesWithContext}`
+
+    console.log(`Batched prompt: ~${Math.ceil(batchedPrompt.length / 4)} input tokens, max ${maxOutputTokens} output tokens`)
+
+    const batchedRaw = await callAI(MODEL_MAIN, [{
+      role: 'system',
+      content: 'You are a professional resume writer. Follow the output format EXACTLY. Use the section markers [SUMMARY], [EXP_0], [EXP_1], etc. Output ONLY what is asked.'
+    }, {
+      role: 'user',
+      content: batchedPrompt
+    }], maxOutputTokens)
+
+    const parsed = parseBatchedResponse(batchedRaw, profile.experiences.length)
+    console.log(`Parsed: summary=${parsed.summary.length > 0 ? 'yes' : 'NO'}, experiences=${parsed.experiences.map(e => e.length).join(',')}`)
+
+    // Build work entries from parsed response
+    const workEntries: any[] = []
+    for (let i = 0; i < profile.experiences.length; i++) {
+      const exp = profile.experiences[i]
+      let highlights = parsed.experiences[i] || []
+
+      // Limit bullets per mode
+      highlights = highlights.slice(0, isLong ? 6 : 2)
+
+      // Fallback: if AI returned nothing, use raw context
+      if (highlights.length === 0 && exp.context && exp.context.trim().length >= 20) {
+        highlights = exp.context.split(/\r?\n+/).filter((l: string) => l.trim().length > 10).slice(0, isLong ? 6 : 2)
+        console.log(`  ⚠ ${exp.role} @ ${exp.company}: fallback to raw context`)
       } else {
-        console.log(`  - ${exp.role} @ ${exp.company}: skipped (no context)`)
+        console.log(`  ✓ ${exp.role} @ ${exp.company}: ${highlights.length} bullets`)
       }
 
       workEntries.push({
@@ -211,7 +259,7 @@ Rules:
       })
     }
 
-    // Step 4: Build JSON Resume object (standard schema)
+    // Build JSON Resume object (standard schema)
     const locationParts = (profile.location || '').split(',')
 
     const jsonResume = {
@@ -220,7 +268,7 @@ Rules:
         label: profile.title,
         email: profile.email,
         phone: profile.phone,
-        summary,
+        summary: parsed.summary || `${profile.name} is an experienced ${profile.title}.`,
         location: {
           city: locationParts[0]?.trim() || '',
           region: locationParts[1]?.trim() || '',
@@ -229,13 +277,16 @@ Rules:
         profiles: [] as any[]
       },
       work: workEntries,
-      education: (profile.education || []).map((edu: any) => ({
-        institution: edu.school || '',
-        studyType: edu.degree?.split(',')[0]?.trim() || edu.degree || '',
-        area: edu.degree?.split(',').slice(1).join(',').trim() || '',
-        startDate: '',
-        endDate: edu.year?.toString() || ''
-      })),
+      education: (profile.education || []).map((edu: any) => {
+        const year = edu.year?.toString().trim() || ''
+        const endDate = year ? (year.match(/^\d{4}$/) ? `${year}-01-01` : year) : ''
+        return {
+          institution: edu.school || '',
+          studyType: edu.degree?.split(',')[0]?.trim() || edu.degree || '',
+          area: edu.degree?.split(',').slice(1).join(',').trim() || '',
+          endDate,
+        }
+      }),
       skills: groupSkills(profile.skills || [])
     }
 
@@ -245,11 +296,11 @@ Rules:
       job_description: jd,
       description_length: descLength,
       resume_text: JSON.stringify(jsonResume),
-      resume_metadata: { model: MODEL },
+      resume_metadata: { model: MODEL_MAIN },
       status: 'completed'
     })
 
-    console.log('=== DONE ===')
+    console.log('=== DONE (2 API calls) ===')
     return NextResponse.json({ jsonResume })
   } catch (error: any) {
     console.error('Generate error:', error)

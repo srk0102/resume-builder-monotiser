@@ -85,7 +85,7 @@ export default function Home() {
             <div className="text-sm text-muted-foreground">Generation time</div>
           </div>
           <div>
-            <div className="text-3xl font-bold text-foreground">7+</div>
+            <div className="text-3xl font-bold text-foreground">10</div>
             <div className="text-sm text-muted-foreground">Professional themes</div>
           </div>
         </div>
@@ -143,7 +143,7 @@ export default function Home() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Summary</p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Senior Software Engineer with 7+ years of experience building scalable microservices and cloud-native applications. Proven track record in Node.js, TypeScript, and AWS infrastructure, with expertise in CI/CD pipelines and cross-functional collaboration.
+                      Senior Software Engineer with 10 years of experience building scalable microservices and cloud-native applications. Proven track record in Node.js, TypeScript, and AWS infrastructure, with expertise in CI/CD pipelines and cross-functional collaboration.
                     </p>
                   </div>
 
@@ -259,7 +259,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  Choose from 7+ professional themes. Edit and preview in real-time before exporting.
+                  Choose from 10 professional themes. Edit and preview in real-time before exporting.
                 </p>
               </CardContent>
             </Card>

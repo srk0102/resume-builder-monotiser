@@ -20,11 +20,32 @@ export default function SignUpPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.signUp({
+
+    const { data, error } = await supabase.auth.signUp({
       email, password,
       options: { emailRedirectTo: `${location.origin}/auth/callback?next=/profile` },
     })
-    if (error) { setError(error.message) } else { setSuccess(true) }
+
+    if (error) {
+      // If user already exists, try signing them in
+      if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('already been registered')) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+        if (signInError) {
+          setError('An account with this email already exists. Please sign in instead.')
+        } else {
+          window.location.href = '/dashboard'
+          return
+        }
+      } else {
+        setError(error.message)
+      }
+    } else if (data.user && !data.user.identities?.length) {
+      // Supabase returns a user with empty identities if email already exists (when email confirmations enabled)
+      setError('An account with this email already exists. Please sign in instead.')
+    } else {
+      setSuccess(true)
+    }
+
     setLoading(false)
   }
 
@@ -66,7 +87,12 @@ export default function SignUpPage() {
               <p className="text-xs text-muted-foreground mt-1">Must be at least 6 characters</p>
             </div>
             {error && (
-              <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">{error}</div>
+              <div className="p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
+                {error}
+                {error.includes('already exists') && (
+                  <Link href="/signin" className="block mt-2 font-medium text-primary hover:underline">Go to Sign In →</Link>
+                )}
+              </div>
             )}
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
               {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating account...</> : 'Sign Up'}

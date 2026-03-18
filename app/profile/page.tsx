@@ -66,7 +66,7 @@ export default function ProfilePage() {
       updated_at: new Date().toISOString()
     })
     if (error) { setSaveError(error.message); setSaving(false) }
-    else { router.push('/generate') }
+    else { router.push('/dashboard') }
   }
 
   function addExperience() { setExperiences([...experiences, { company: '', role: '', startDate: '', endDate: '', context: '' }]) }

@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Navbar } from '@/components/navbar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Loader2, FileText, Clock, Download, Trash2, Plus, Eye } from 'lucide-react'
+import { Loader2, FileText, Clock, Download, Trash2, Plus, Eye, CheckCircle2, XCircle } from 'lucide-react'
 
 interface Generation {
   id: string
@@ -18,15 +18,26 @@ interface Generation {
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+      <DashboardContent />
+    </Suspense>
+  )
+}
+
+function DashboardContent() {
   const [loading, setLoading] = useState(true)
   const [generations, setGenerations] = useState<Generation[]>([])
   const [user, setUser] = useState<any>(null)
   const [credits, setCredits] = useState(0)
   const [previews, setPreviews] = useState<Record<string, string>>({})
   const [loadingPreviews, setLoadingPreviews] = useState<Record<string, boolean>>({})
+  const [showBanner, setShowBanner] = useState(true)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const payment = searchParams.get('payment')
 
   useEffect(() => { loadData() }, [])
 
@@ -75,9 +86,7 @@ export default function DashboardPage() {
   }
 
   function handleOpen(gen: Generation) {
-    sessionStorage.setItem('loadResume', gen.resume_text)
-    sessionStorage.setItem('loadJD', gen.job_description)
-    router.push('/generate')
+    router.push(`/generate/${gen.id}`)
   }
 
   function handleDownload(gen: Generation) {
@@ -116,6 +125,36 @@ export default function DashboardPage() {
       <Navbar user={user} credits={credits} />
 
       <div className="container max-w-7xl mx-auto px-4 py-8">
+        {/* Payment Banner */}
+        {payment === 'success' && showBanner && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+              <div>
+                <p className="font-medium text-green-700 dark:text-green-300">Payment successful!</p>
+                <p className="text-sm text-green-600/80 dark:text-green-400/80">Credits have been added to your account.</p>
+              </div>
+            </div>
+            <button onClick={() => setShowBanner(false)} className="text-green-600 dark:text-green-400 hover:opacity-70">
+              <XCircle className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+        {payment === 'cancelled' && showBanner && (
+          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <XCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0" />
+              <div>
+                <p className="font-medium text-yellow-700 dark:text-yellow-300">Payment cancelled</p>
+                <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80">No charges were made. You can purchase credits anytime from Buy Credits.</p>
+              </div>
+            </div>
+            <button onClick={() => setShowBanner(false)} className="text-yellow-600 dark:text-yellow-400 hover:opacity-70">
+              <XCircle className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>

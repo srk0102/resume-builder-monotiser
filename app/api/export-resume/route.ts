@@ -1,15 +1,45 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// JSON Resume themes
+// Normalize dates to YYYY-MM-DD for jsonresume-themeutils compatibility
+// Handles: "" -> undefined, "2023" -> "2023-01-01", "2023-2025" -> "2025-01-01" (take last year),
+// "October 2025" -> "2025-10-01", "2023-01-01" -> "2023-01-01"
+function fixDate(d: string | undefined): string | undefined {
+  if (!d || !d.trim()) return undefined
+  const s = d.trim()
+  // Already ISO format
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  // Plain year "2023"
+  if (/^\d{4}$/.test(s)) return `${s}-01-01`
+  // Year range "2017-2021" — use the last year
+  if (/^\d{4}-\d{4}$/.test(s)) return `${s.split('-')[1]}-01-01`
+  // "Month Year" like "October 2025"
+  const monthMatch = s.match(/^(\w+)\s+(\d{4})$/)
+  if (monthMatch) {
+    const months: Record<string, string> = { january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12' }
+    const m = months[monthMatch[1].toLowerCase()]
+    if (m) return `${monthMatch[2]}-${m}-01`
+  }
+  // "YYYY-MM" like "2023-05"
+  if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`
+  // Fallback: try to extract any 4-digit year
+  const yearMatch = s.match(/(\d{4})/)
+  if (yearMatch) return `${yearMatch[1]}-01-01`
+  return undefined
+}
+
+// 10 JSON Resume themes from the ecosystem — https://jsonresume.org/themes
 const themes: Record<string, any> = {
   elegant: require('jsonresume-theme-elegant'),
   stackoverflow: require('jsonresume-theme-stackoverflow'),
   kendall: require('jsonresume-theme-kendall'),
-  flat: require('jsonresume-theme-flat'),
   macchiato: require('jsonresume-theme-macchiato'),
-  class: require('jsonresume-theme-class'),
-  onepage: require('jsonresume-theme-onepage'),
+  engineering: require('jsonresume-theme-engineering'),
+  academic: require('jsonresume-theme-academic'),
+  spartan: require('jsonresume-theme-spartan'),
+  orbit: require('jsonresume-theme-orbit'),
+  autumn: require('jsonresume-theme-autumn'),
+  one: require('jsonresume-theme-one'),
 }
 
 export async function POST(request: Request) {
@@ -27,48 +57,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'JSON Resume data required' }, { status: 400 })
     }
 
-    // Render with selected theme
-    const selectedTheme = themes[theme] || themes.elegant
-    let html = selectedTheme.render(jsonResume)
+    // Deep-clone and ensure all fields themes expect exist
+    const sanitized = JSON.parse(JSON.stringify(jsonResume))
+    if (!sanitized.basics) sanitized.basics = {}
+    sanitized.basics.location = { address: '', city: '', region: '', postalCode: '', countryCode: '', ...(sanitized.basics.location || {}) }
+    if (!sanitized.basics.profiles) sanitized.basics.profiles = []
+    if (!sanitized.work) sanitized.work = []
+    if (!sanitized.education) sanitized.education = []
+    if (!sanitized.skills) sanitized.skills = []
+    if (sanitized.education) {
+      sanitized.education = sanitized.education.map((edu: any) => ({
+        ...edu,
+        startDate: fixDate(edu.startDate),
+        endDate: fixDate(edu.endDate),
+      }))
+    }
+    if (sanitized.work) {
+      sanitized.work = sanitized.work.map((w: any) => ({
+        ...w,
+        startDate: fixDate(w.startDate),
+        endDate: fixDate(w.endDate),
+      }))
+    }
 
-    // Remove all images from themed HTML (no profile pics in resumes)
+    const selectedTheme = themes[theme] || themes.elegant
+    let html = selectedTheme.render(sanitized)
+
+    // Handle async themes
+    if (html instanceof Promise) {
+      html = await html
+    }
+
+    // Remove profile images (not needed for ATS resumes)
     html = html.replace(/<img[^>]*>/gi, '')
     html = html.replace('</head>', '<style>img{display:none!important;}</style></head>')
 
-    // Inject CSS fixes for broken themes
-    if (theme === 'class') {
-      const classFixCSS = `<style>
-        /* Override class theme's broken float-based skills layout */
-        #skills {
-          overflow: visible !important;
-        }
-        #skills .item,
-        #languages .item,
-        #interests .item {
-          float: none !important;
-          width: auto !important;
-          display: inline-block !important;
-          vertical-align: top !important;
-          min-width: 140px !important;
-          max-width: 280px !important;
-          margin-right: 24px !important;
-          margin-bottom: 10px !important;
-        }
-        #skills .item h3 {
-          font-size: 14px !important;
-          margin-bottom: 4px !important;
-          margin-top: 0 !important;
-        }
-        #skills .item ul {
-          padding-left: 20px !important;
-          margin: 0 !important;
-        }
-        #skills .item ul li {
-          font-size: 13px !important;
-          line-height: 1.5 !important;
-        }
-      </style>`
-      html = html.replace('</head>', classFixCSS + '</head>')
+    // Hide hamburger/nav toggle from elegant theme
+    if (theme === 'elegant' || !themes[theme]) {
+      html = html.replace('</head>', '<style>.nav-toggle,.navbar-toggle,.hamburger-menu,[class*="toggle"]{display:none!important;}</style></head>')
     }
 
     return NextResponse.json({ html, theme })
