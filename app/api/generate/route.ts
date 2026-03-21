@@ -185,18 +185,22 @@ export async function POST(request: Request) {
       ? `For EACH experience, write exactly 5-6 ATS-optimized bullet points:
 - Start each with a strong action verb
 - Keep ALL specific technologies, metrics, and details from the original
-- Naturally weave in relevant target keywords
-- Do NOT invent information not in the original`
+- CRITICAL: Weave target keywords into EVERY experience, not just the most recent ones. For example if the JD asks for "Golang" and the candidate used Go in an older role, mention it explicitly. If they used related tech (backend APIs, microservices), frame it using JD terminology.
+- The MOST RECENT experience should have the STRONGEST alignment with JD keywords
+- Older experiences should still reference JD-relevant skills/tech wherever truthfully applicable — reframe existing work using JD language (e.g., if they built APIs and JD says "RESTful services", say "RESTful services")
+- Do NOT invent information not in the original, but DO reframe existing work to match JD terminology`
       : `For EACH experience, write 1-2 concise bullet points:
 - Combine related work into single impactful statements
 - Group technologies by category (say "frontend frameworks" not "React, Angular, Vue", say "cloud platforms" not "AWS, GCP, Azure")
+- CRITICAL: Weave target keywords into EVERY experience, not just the most recent. Reframe existing work using JD terminology wherever truthfully applicable.
 - Only mention 1-2 MOST important specific technologies if they match target keywords
 - Keep metrics and measurable impact
 - Each bullet should be max 1.5 lines
-- Do NOT invent information not in the original`
+- Do NOT invent information not in the original, but DO reframe existing work to match JD language`
 
-    // Estimate output tokens needed: summary (~100) + per experience (long: ~150, short: ~60)
-    const maxOutputTokens = 200 + profile.experiences.length * (isLong ? 200 : 100)
+    // Don't cap output tokens — let the model finish naturally
+    // Together.ai only charges for tokens actually generated
+    const maxOutputTokens = 16000
 
     const batchedPrompt = `You are a professional resume writer. Generate a resume summary and tailored bullet points for ALL experiences below.
 
@@ -231,6 +235,75 @@ ${experiencesWithContext}`
 
     const parsed = parseBatchedResponse(batchedRaw, profile.experiences.length)
     console.log(`Parsed: summary=${parsed.summary.length > 0 ? 'yes' : 'NO'}, experiences=${parsed.experiences.map(e => e.length).join(',')}`)
+
+    // ========================================
+    // CALL 3 (only if needed): Retry incomplete experiences
+    // Check for truncated or missing bullets and regenerate just those
+    // ========================================
+    const expectedBullets = isLong ? 5 : 2
+    const incompleteIndices: number[] = []
+    for (let i = 0; i < profile.experiences.length; i++) {
+      const bullets = parsed.experiences[i] || []
+      const lastBullet = bullets[bullets.length - 1] || ''
+      const isTruncated = bullets.length > 0 && lastBullet.length < 30 && !lastBullet.endsWith('.')
+      if (bullets.length < expectedBullets || isTruncated) {
+        incompleteIndices.push(i)
+      }
+    }
+
+    if (incompleteIndices.length > 0) {
+      console.log(`  ⚠ Retrying ${incompleteIndices.length} incomplete experiences: ${incompleteIndices.map(i => profile.experiences[i].company).join(', ')}`)
+
+      const retryExperiences = incompleteIndices.map(i => {
+        const exp = profile.experiences[i]
+        const contextTrimmed = exp.context && exp.context.trim().length >= 20
+          ? (exp.context.length > 3000 ? exp.context.substring(0, 3000) : exp.context)
+          : 'No details provided.'
+        return `[EXP_${i}] ${exp.role} at ${exp.company} (${exp.startDate || '?'} - ${exp.endDate || 'Present'})\n${contextTrimmed}`
+      }).join('\n\n')
+
+      const retryPrompt = `You are a professional resume writer. Generate tailored bullet points for the experiences below.
+
+CANDIDATE: ${profile.name}, ${profile.title}
+TARGET KEYWORDS: ${keywords}
+
+OUTPUT FORMAT (follow EXACTLY):
+${incompleteIndices.map(i => `[EXP_${i}]\n- bullet point 1\n- bullet point 2${isLong ? '\n- bullet point 3\n- bullet point 4\n- bullet point 5' : ''}`).join('\n\n')}
+
+RULES:
+${bulletRules}
+- Output ONLY the sections above with their markers. No preamble, no explanations.
+- Each bullet starts with "- "
+
+EXPERIENCES:
+${retryExperiences}`
+
+      const retryRaw = await callAI(MODEL_MAIN, [{
+        role: 'system',
+        content: 'You are a professional resume writer. Follow the output format EXACTLY. Use the section markers [EXP_0], [EXP_1], etc. Output ONLY what is asked.'
+      }, {
+        role: 'user',
+        content: retryPrompt
+      }], 16000)
+
+      const retryParsed = parseBatchedResponse(retryRaw, profile.experiences.length)
+
+      // Merge retry results back into parsed
+      for (const i of incompleteIndices) {
+        const retryBullets = retryParsed.experiences[i] || []
+        if (retryBullets.length >= expectedBullets) {
+          parsed.experiences[i] = retryBullets
+          console.log(`  ✓ Retry ${profile.experiences[i].company}: ${retryBullets.length} bullets (fixed)`)
+        } else if (retryBullets.length > (parsed.experiences[i]?.length || 0)) {
+          parsed.experiences[i] = retryBullets
+          console.log(`  ~ Retry ${profile.experiences[i].company}: ${retryBullets.length} bullets (improved but still short)`)
+        } else {
+          console.log(`  ✗ Retry ${profile.experiences[i].company}: no improvement`)
+        }
+      }
+
+      console.log('=== DONE (3 API calls - with retry) ===')
+    }
 
     // Build work entries from parsed response
     const workEntries: any[] = []
@@ -313,7 +386,9 @@ ${experiencesWithContext}`
       status: 'completed'
     })
 
-    console.log('=== DONE (2 API calls) ===')
+    if (incompleteIndices.length === 0) {
+      console.log('=== DONE (2 API calls) ===')
+    }
     return NextResponse.json({ jsonResume })
   } catch (error: any) {
     console.error('Generate error:', error)
